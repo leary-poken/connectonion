@@ -1,0 +1,320 @@
+"""Integration tests for agent workflows."""
+
+"""
+LLM-Note: Integration tests for complete agent workflows
+
+What it tests:
+- TestAgentWorkflows: End-to-end agent execution patterns
+  - test_simple_conversation_workflow: Text-only conversation
+  - test_single_tool_workflow: Single tool execution
+  - Multi-tool workflows and complex interactions
+
+Components under test:
+- connectonion.Agent (complete workflows)
+- Tool execution integration
+- MockLLM for deterministic testing
+"""
+
+import pytest
+from unittest.mock import Mock, patch
+from connectonion import Agent
+from tests.fixtures.test_tools import calculator, current_time, read_file
+from tests.utils.mock_helpers import (
+    MockLLM,
+    LLMResponseBuilder,
+    AgentWorkflowMocker,
+    OpenAIMockBuilder
+)
+
+
+@pytest.mark.integration
+class TestAgentWorkflows:
+    """Test complete agent workflows end-to-end."""
+    
+    def test_simple_conversation_workflow(self, temp_dir):
+        """Test agent handling simple conversation without tools."""
+        # Mock LLM
+        mock_llm = MockLLM(responses=[
+            LLMResponseBuilder.text_response(
+                "Hello! I'm ConnectOnion, ready to help you with various tasks."
+            )
+        ])
+
+        # Create agent
+        agent = Agent(name="conversation_test", llm=mock_llm, log=False)
+
+        # Run task
+        result = agent.input("Hello, introduce yourself")
+
+        # Verify response
+        assert "ConnectOnion" in result
+        # History removed - checking trace instead
+    
+    def test_single_tool_workflow(self, temp_dir):
+        """Test agent using a single tool."""
+        # Mock LLM responses
+        mock_llm = MockLLM(responses=[
+            LLMResponseBuilder.tool_call_response("calculator", {"expression": "25 * 4"}),
+            LLMResponseBuilder.text_response("The result of 25 × 4 is 100.")
+        ])
+
+        # Create agent with calculator
+        agent = Agent(name="single_tool_test", llm=mock_llm, tools=[calculator], log=False)
+
+        # Run calculation task
+        result = agent.input("What is 25 times 4?")
+
+        # Verify response
+        assert "100" in result
+        # History removed - checking trace instead
+    
+    def test_multi_tool_chaining_workflow(self, temp_dir):
+        """Test agent chaining multiple tools in sequence."""
+        # Mock LLM responses
+        mock_llm = MockLLM(responses=[
+            LLMResponseBuilder.tool_call_response("calculator", {"expression": "100 / 4"}),
+            LLMResponseBuilder.tool_call_response("current_time", {}),
+            LLMResponseBuilder.text_response("The result is 25.0, calculated at the current time.")
+        ])
+
+        # Create agent with multiple tools
+        tools = [calculator, current_time]
+        agent = Agent(name="multi_tool_test", llm=mock_llm, tools=tools, log=False)
+
+        # Run complex task
+        result = agent.input("Calculate 100 divided by 4, then tell me what time you did this")
+
+        # Verify response
+        assert "25.0" in result
+        # History removed - tool call tracking no longer available
+    
+    def test_file_reading_workflow(self, temp_dir, test_files):
+        """Test agent reading and processing files."""
+        # Mock LLM responses
+        mock_llm = MockLLM(responses=[
+            LLMResponseBuilder.tool_call_response("read_file", {"filepath": test_files["normal"]}),
+            LLMResponseBuilder.text_response("The file contains a greeting: 'Hello, ConnectOnion!'")
+        ])
+
+        # Create agent with file reading capability
+        agent = Agent(name="file_test", llm=mock_llm, tools=[read_file], log=False)
+
+        # Run file reading task
+        result = agent.input(f"Read the file {test_files['normal']} and tell me what it says")
+
+        # Verify response
+        assert "Hello, ConnectOnion!" in result
+        # History removed - checking trace instead
+    
+    def test_complex_multi_step_workflow(self, temp_dir, test_files):
+        """Test complex workflow involving multiple tools and steps."""
+        # Create a test file with numbers
+        import os
+        numbers_file = os.path.join(temp_dir, "numbers.txt")
+        with open(numbers_file, "w") as f:
+            f.write("First number: 15\nSecond number: 8")
+
+        # Mock LLM responses for complex workflow
+        mock_llm = MockLLM(responses=[
+            # Step 1: Read the file
+            LLMResponseBuilder.tool_call_response("read_file", {"filepath": numbers_file}),
+            # Step 2: Extract and calculate
+            LLMResponseBuilder.tool_call_response("calculator", {"expression": "15 + 8"}),
+            # Step 3: Get timestamp
+            LLMResponseBuilder.tool_call_response("current_time", {}),
+            # Step 4: Final response
+            LLMResponseBuilder.text_response(
+                "I read the file and found two numbers (15 and 8). "
+                "Their sum is 23, calculated at the current time."
+            )
+        ])
+
+        # Create agent with all tools
+        tools = [read_file, calculator, current_time]
+        agent = Agent(name="complex_test", llm=mock_llm, tools=tools, log=False)
+
+        # Run complex task
+        result = agent.input(
+            f"Read the numbers from {numbers_file}, add them together, "
+            "and tell me when you completed the calculation"
+        )
+
+        # Verify response
+        assert "23" in result
+        # History removed - tool call tracking no longer available
+    
+    def test_iteration_limit_protection(self, temp_dir):
+        """Test that agent doesn't get stuck in infinite tool calling loops."""
+        # Mock LLM that keeps requesting the same tool
+        # Create 15 identical tool call responses (more than the limit of 10)
+        responses = [
+            LLMResponseBuilder.tool_call_response("calculator", {"expression": "1 + 1"})
+            for _ in range(15)
+        ]
+        mock_llm = MockLLM(responses=responses)
+
+        # Create agent with explicit low limit to test iteration protection
+        agent = Agent(name="iteration_test", llm=mock_llm, tools=[calculator], log=False, max_iterations=10)
+
+        # Run task
+        result = agent.input("Keep calculating 1 + 1")
+
+        # Should stop at max iterations
+        assert "Maximum iterations" in result and "reached" in result
+        # Should have stopped at max iterations (10), not continue to 15
+
+
+@pytest.mark.integration
+class TestErrorRecoveryWorkflows:
+    """Test agent behavior during error scenarios."""
+
+    def test_tool_execution_error_recovery(self, temp_dir):
+        """Test agent handling tool execution errors gracefully."""
+        # Mock LLM responses
+        mock_llm = MockLLM(responses=[
+            # First: request invalid calculation
+            LLMResponseBuilder.tool_call_response("calculator", {"expression": "invalid_expr"}),
+            # Second: acknowledge error and try again
+            LLMResponseBuilder.tool_call_response("calculator", {"expression": "2 + 2"}),
+            # Third: provide final answer
+            LLMResponseBuilder.text_response("After the error, I calculated 2 + 2 = 4.")
+        ])
+
+        # Create agent
+        agent = Agent(name="error_recovery_test", llm=mock_llm, tools=[calculator], log=False)
+
+        # Run task
+        result = agent.input("Calculate something")
+
+        # Verify error recovery
+        assert "4" in result
+        # History removed - checking trace instead
+
+        # First call should have error status
+        # Second call should succeed
+    
+    def test_unknown_tool_handling(self, temp_dir):
+        """Test agent handling requests for unknown tools."""
+        # Mock LLM requesting non-existent tool
+        mock_llm = MockLLM(responses=[
+            LLMResponseBuilder.tool_call_response("unknown_tool", {"param": "value"}),
+            LLMResponseBuilder.text_response("I apologize, that tool is not available.")
+        ])
+
+        # Create agent with limited tools
+        agent = Agent(name="unknown_tool_test", llm=mock_llm, tools=[calculator], log=False)
+
+        # Run task
+        result = agent.input("Use a special tool")
+
+        # Verify unknown tool handling
+        assert "not available" in result
+        # History removed - checking trace instead
+    
+    def test_file_not_found_recovery(self, temp_dir):
+        """Test agent handling file not found errors."""
+        # Mock LLM responses
+        mock_llm = MockLLM(responses=[
+            # Request to read non-existent file
+            LLMResponseBuilder.tool_call_response("read_file", {"filepath": "/nonexistent/file.txt"}),
+            # Acknowledge the error
+            LLMResponseBuilder.text_response("I cannot read that file as it doesn't exist.")
+        ])
+
+        # Create agent
+        agent = Agent(name="file_error_test", llm=mock_llm, tools=[read_file], log=False)
+
+        # Run task
+        result = agent.input("Read a file")
+
+        # Verify error handling
+        assert "doesn't exist" in result
+        # History removed - checking trace instead
+
+
+@pytest.mark.integration
+class TestConcurrentAgentOperations:
+    """Test concurrent agent operations."""
+
+    def test_multiple_agents_different_histories(self, temp_dir):
+        """Test that multiple agents can run concurrently."""
+        import threading
+
+        # Mock LLM
+        mock_llm1 = MockLLM(responses=[LLMResponseBuilder.text_response("Agent 1 response")])
+        mock_llm2 = MockLLM(responses=[LLMResponseBuilder.text_response("Agent 2 response")])
+
+        # Create two agents
+        agent1 = Agent(name="concurrent_agent_1", llm=mock_llm1, log=False)
+        agent2 = Agent(name="concurrent_agent_2", llm=mock_llm2, log=False)
+
+        # Results storage
+        results = {}
+
+        def run_agent(agent, task_id):
+            result = agent.input(f"Task {task_id}")
+            results[agent.name] = result
+
+        # Run agents concurrently
+        thread1 = threading.Thread(target=run_agent, args=(agent1, "A"))
+        thread2 = threading.Thread(target=run_agent, args=(agent2, "B"))
+
+        thread1.start()
+        thread2.start()
+
+        thread1.join()
+        thread2.join()
+
+        # Verify concurrent execution completed successfully
+        assert results["concurrent_agent_1"] == "Agent 1 response"
+        assert results["concurrent_agent_2"] == "Agent 2 response"
+
+
+@pytest.mark.slow
+@pytest.mark.integration
+class TestLongRunningWorkflows:
+    """Test long-running and resource-intensive workflows."""
+
+    def test_many_sequential_tasks(self, temp_dir):
+        """Test agent handling many sequential tasks."""
+        # Mock LLM for multiple tasks
+        responses = [
+            LLMResponseBuilder.text_response(f"Completed task {i}")
+            for i in range(20)
+        ]
+        mock_llm = MockLLM(responses=responses)
+
+        # Create agent
+        agent = Agent(name="sequential_test", llm=mock_llm, log=False)
+
+        # Run multiple tasks
+        for i in range(20):
+            result = agent.input(f"Task {i}")
+            assert f"Completed task {i}" in result
+
+        # History removed - task tracking no longer available
+    
+    def test_large_tool_output_handling(self, temp_dir):
+        """Test agent handling tools that produce large outputs."""
+        # Create large file
+        import os
+        large_file = os.path.join(temp_dir, "huge.txt")
+        with open(large_file, "w") as f:
+            for i in range(10000):
+                f.write(f"This is line {i} with substantial content to make the file large.\n")
+
+        # Mock LLM response
+        mock_llm = MockLLM(responses=[
+            LLMResponseBuilder.tool_call_response("read_file", {"filepath": large_file}),
+            LLMResponseBuilder.text_response("I've read the large file successfully.")
+        ])
+
+        # Create agent
+        agent = Agent(name="large_output_test", llm=mock_llm, tools=[read_file], log=False)
+
+        # Run task
+        result = agent.input("Read the large file")
+
+        # Verify handling
+        assert "successfully" in result
+        # History removed - tool result tracking no longer available

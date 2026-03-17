@@ -1,0 +1,333 @@
+# Host configuration — edit these values, then run: host(create_agent)
+trust: careful
+port: 8000
+workers: 1
+result_ttl: 86400
+relay_url: wss://oo.openonion.ai/ws/announce
+reload: false
+
+# File upload limits - uncomment to customize
+# max_file_size: 10                 # MB per file (both WebSocket and HTTP)
+# max_files_per_request: 10         # Max number of files in one request
+
+# Auto-approve tool permissions
+# Default permissions for safe read-only commands
+permissions:
+  # Safe read-only tools (built-in)
+  "read":
+    allowed: true
+    source: safe
+    reason: read-only operation
+    expires:
+      type: never
+
+  "read_file":
+    allowed: true
+    source: safe
+    reason: read-only operation
+    expires:
+      type: never
+
+  "glob":
+    allowed: true
+    source: safe
+    reason: read-only operation
+    expires:
+      type: never
+
+  "grep":
+    allowed: true
+    source: safe
+    reason: read-only operation
+    expires:
+      type: never
+
+  "search":
+    allowed: true
+    source: safe
+    reason: read-only operation
+    expires:
+      type: never
+
+  "list_files":
+    allowed: true
+    source: safe
+    reason: read-only operation
+    expires:
+      type: never
+
+  "get_file_info":
+    allowed: true
+    source: safe
+    reason: read-only operation
+    expires:
+      type: never
+
+  "task":
+    allowed: true
+    source: safe
+    reason: sub-agents handle own approval
+    expires:
+      type: never
+
+  "load_guide":
+    allowed: true
+    source: safe
+    reason: read-only operation
+    expires:
+      type: never
+
+  "enter_plan_mode":
+    allowed: true
+    source: safe
+    reason: planning mode
+    expires:
+      type: never
+
+  "task_output":
+    allowed: true
+    source: safe
+    reason: read-only operation
+    expires:
+      type: never
+
+  "ask_user":
+    allowed: true
+    source: safe
+    reason: user interaction
+    expires:
+      type: never
+
+  # System information commands (Linux/Unix)
+  "Bash(pwd)":
+    allowed: true
+    source: config
+    reason: safe - show current directory
+    expires:
+      type: never
+
+  "Bash(ls *)":
+    allowed: true
+    source: config
+    reason: safe - list directory contents
+    expires:
+      type: never
+
+  "Bash(uname *)":
+    allowed: true
+    source: config
+    reason: safe - system information
+    expires:
+      type: never
+
+  "Bash(lscpu *)":
+    allowed: true
+    source: config
+    reason: safe - CPU info
+    expires:
+      type: never
+
+  "Bash(free *)":
+    allowed: true
+    source: config
+    reason: safe - memory info
+    expires:
+      type: never
+
+  "Bash(df *)":
+    allowed: true
+    source: config
+    reason: safe - disk usage info
+    expires:
+      type: never
+
+  # macOS system information
+  "Bash(sw_vers)":
+    allowed: true
+    source: config
+    reason: safe - macOS version
+    expires:
+      type: never
+
+  "Bash(system_profiler *)":
+    allowed: true
+    source: config
+    reason: safe - system hardware profile
+    expires:
+      type: never
+
+  "Bash(sysctl *)":
+    allowed: true
+    source: config
+    reason: safe - system control info
+    expires:
+      type: never
+
+  "Bash(vm_stat *)":
+    allowed: true
+    source: config
+    reason: safe - virtual memory stats
+    expires:
+      type: never
+
+  "Bash(top *)":
+    allowed: true
+    source: config
+    reason: safe - process and system stats
+    expires:
+      type: never
+
+  "Bash(ps *)":
+    allowed: true
+    source: config
+    reason: safe - process list
+    expires:
+      type: never
+
+  "Bash(uptime *)":
+    allowed: true
+    source: config
+    reason: safe - system uptime
+    expires:
+      type: never
+
+  "Bash(whoami)":
+    allowed: true
+    source: config
+    reason: safe - current user
+    expires:
+      type: never
+
+  "Bash(hostname *)":
+    allowed: true
+    source: config
+    reason: safe - system hostname
+    expires:
+      type: never
+
+  "Bash(date *)":
+    allowed: true
+    source: config
+    reason: safe - current date/time
+    expires:
+      type: never
+
+  "Bash(which *)":
+    allowed: true
+    source: config
+    reason: safe - find command path
+    expires:
+      type: never
+
+  "Bash(env *)":
+    allowed: true
+    source: config
+    reason: safe - environment variables
+    expires:
+      type: never
+
+  "Bash(grep *)":
+    allowed: true
+    source: config
+    reason: safe - search text
+    expires:
+      type: never
+
+  "Bash(perl *)":
+    allowed: true
+    source: config
+    reason: safe - text processing
+    expires:
+      type: never
+
+  # Common command chains (exact matches)
+  "Bash(pwd && ls -F)":
+    allowed: true
+    source: config
+    reason: safe - show location and list
+    expires:
+      type: never
+
+  "Bash(uname -a; lscpu | grep \"Model name\"; free -h; df -h /)":
+    allowed: true
+    source: config
+    reason: safe - system info summary
+    expires:
+      type: never
+
+  "Bash(sw_vers; sysctl -n machdep.cpu.brand_string; vm_stat | perl -ne '/page size of (\\d+) bytes/ && ($s=$1); /Pages free:\\s+(\\d+)/ && ($f=$1); /Pages active:\\s+(\\d+)/ && ($a=$1); /Pages inactive:\\s+(\\d+)/ && ($i=$1); /Pages speculative:\\s+(\\d+)/ && ($p=$1); /Pages wired down:\\s+(\\d+)/ && ($w=$1); END { printf \"Memory: Total: %.2fGB, Free: %.2fGB\\n\", ($f+$a+$i+$p+$w)*$s/1024/1024/1024, $f*$s/1024/1024/1024 }'; df -h /)":
+    allowed: true
+    source: config
+    reason: safe - macOS system info summary
+    expires:
+      type: never
+
+  # Git read commands
+  "Bash(git status)":
+    allowed: true
+    source: config
+    reason: safe git read
+    expires:
+      type: never
+
+  "Bash(git diff *)":
+    allowed: true
+    source: config
+    reason: safe git diff
+    expires:
+      type: never
+
+  "Bash(git log *)":
+    allowed: true
+    source: config
+    reason: safe git log
+    expires:
+      type: never
+
+  "Bash(git branch *)":
+    allowed: true
+    source: config
+    reason: safe git branch info
+    expires:
+      type: never
+
+  # Testing commands
+  "Bash(pytest *)":
+    allowed: true
+    source: config
+    reason: safe test execution
+    expires:
+      type: never
+
+  "Bash(npm test)":
+    allowed: true
+    source: config
+    reason: safe npm test
+    expires:
+      type: never
+
+# Additional permissions - uncomment to customize
+#   # Simple tool name - matches any call
+#   "read_file":
+#     allowed: true
+#     source: config
+#     reason: safe read operation
+#     expires:
+#       type: never
+#
+#   # Parameter matching - write to markdown files only
+#   "write":
+#     allowed: true
+#     source: config
+#     reason: safe documentation edits
+#     match:
+#       file_path: "*.md"
+#     expires:
+#       type: never
+
+# summary: "What your agent does"
+# examples:
+#   - "Example prompt 1"
+#   - "Example prompt 2"
+# whitelist: whitelist.txt
+# blacklist: blacklist.txt
