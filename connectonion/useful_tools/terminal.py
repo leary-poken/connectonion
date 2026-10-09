@@ -282,4 +282,3 @@ def autocomplete(suggestions: list, max_visible: int = 5) -> Union[str, None]:
                 selected = (selected + 1) % len(suggestions)
                 live.update(create_table(), refresh=True)
 
-
