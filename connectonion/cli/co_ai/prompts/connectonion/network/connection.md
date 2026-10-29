@@ -535,4 +535,3 @@ if agent.connection:
 
 - **[host.md](host.md)** - Host agents over HTTP/WebSocket
 - **[connect.md](connect.md)** - Connect to remote agents
-
